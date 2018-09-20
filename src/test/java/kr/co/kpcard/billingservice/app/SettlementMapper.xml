@@ -1,0 +1,342 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="Settlement">
+	<select id="getGsRetailSettlementData" resultType="GsRetail" parameterType="ParamGsRetail">
+		<![CDATA[
+			SELECT   TRANSID, 
+			         MERCHANTID, 
+			         ORDERNO ONO, 
+			         APLNO ANO, 
+			         APLDATE ADATE, 
+			         APLTIME ATIME, 
+			         ORDERAMT AMONEY, 
+			         DECODE (RESULTCODE, 'O1', '0', 'D1', '9') ATYPE 
+			  FROM   ORDERLIST_POS 
+			 WHERE	MERCHANTID = #{merchantId}  
+			   AND   SALESDATE = #{saleDate} 
+			   AND   REFUNDFLAG = '00' 
+			   AND   LENGTH(ORDERNO) = 32 
+			         ORDER BY   ATYPE, TRANSID
+		]]>
+	</select>
+	<select id="getGsRetailSettlementCompare" resultType="GsRetail" parameterType="ParamGsRetail">
+		<![CDATA[
+			SELECT     TRANSID, 
+				MERCHANTID, 
+				ORDERNO ONO, 
+				APLNO ANO, 
+				APLDATE ADATE, 
+				APLTIME ATIME, 
+				ORDERAMT AMONEY, 
+				DECODE (RESULTCODE, 'O1', '0', 'D1', '9') 
+				ATYPE 
+			FROM     ORDERLIST_POS OP, GSRETAIL_PAYMENT GP 
+			WHERE         OP.REQORDERNO = GP.ORDER_NO(+) 
+				AND OP.MERCHANTID = #{merchantId} 
+				AND OP.SALESDATE = #{saleDate} 
+				AND OP.REFUNDFLAG = '00' 
+				AND LENGTH (ORDERNO) = 32 
+				AND DECODE (OP.RESULTCODE, 'O1', '0', 'D1', '9', '') = GP.PAY_TYPE(+) 
+				AND NVL(OP.ORDERAMT, 0) <> NVL (GP.PAY_AMOUNT, 0)
+		]]>
+	</select>
+	
+	<select id="getGsnPointSettlementSelect" resultType="GsnPointSelect" parameterType="ParamGsRetail">
+		<![CDATA[
+			SELECT ROWNUM,                                             
+				A.GIFT_NO GIFT_NO,                                         
+				E.EXTEND_NO EXTEND_NO,                                     
+				'E1010' BRANCHCODE,                                        
+				TO_CHAR(A.APLDATE, 'YYYYMMDDHH24MISS') TRANSDATE,          
+				DECODE(A.APLSTATUS, 'O1', '1', 'D1', '2', '0') TRANSTYPE,  
+				A.RC_AMT USEPOINT,                                         
+				TO_CHAR(A.APLDATE, 'YYYYMMDD') ADMITDATE,                  
+				NVL(A.C_APLNO, ' ') ADMITNO                                
+			FROM RC_APPROVAL A, GIFTEXTEND E                           
+			WHERE A.GIFT_NO = E.GIFT_NO                                
+				AND A.APLONLINEID = #{merchantId}                                      
+				AND A.SALESDATE = #{saleDate}                                        
+				AND A.PAY_METHDO IN ('2', 'A2')                            
+				ORDER BY A.APLDATE     
+		]]>
+	</select>
+	
+	<select id="getGsPopSettlementSelect" resultType="GspopSelect" parameterType="ParamGsRetail">
+		<![CDATA[
+			SELECT SALESDATE,                                                                            
+			       BRANCHCODE,                                                                           
+			       ORDERNO,                                                                              
+			       APLNO,                                                                                
+			       APLDATE,                                                                              
+			       APLTIME,                                                                              
+			       GIFT_NO,                                                                              
+			       GIFT_CHECK,                                                                           
+			       (SELECT EXTEND_NO                                                                     
+			        FROM   GIFTEXTEND                                                                    
+			        WHERE  GIFT_NO = A.GIFT_NO) AS EXTEND_NO,                                            
+			       ORDERAMT,                                                                             
+			       TTYPE,                                                                                
+			       ATYPE,                                                                                
+			       PTYPE                                                                                 
+			FROM   (SELECT /*+ INDEX(ORDERLIST_POS IDX_ORDERLIST_POS_S_DATE_003) */SALESDATE,            
+			               BRANCHCODE,                                                                   
+			               ORDERNO,                                                                      
+			               APLNO,                                                                        
+			               APLDATE,                                                                      
+			               APLTIME,                                                                      
+			               (SELECT MAX(B.GIFT_NO)                                                        
+			                FROM   ORDERDETAIL A,                                                        
+			                       (SELECT GIFT_NO,                                                      
+			                               SEQ_NO                                                        
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_NO,                                                      
+			                               SEQ_NO                                                        
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.C_SERIAL = B.SEQ_NO                                                 
+			                AND    A.TRANSID = ORDERLIST_POS.TRANSID ) GIFT_NO,                          
+			               (SELECT MAX(B.GIFT_CHECK)                                                     
+			                FROM   ORDERDETAIL A,                                                        
+			                       (SELECT GIFT_CHECK,                                                   
+			                               SEQ_NO                                                        
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               SEQ_NO                                                        
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.C_SERIAL = B.SEQ_NO                                                 
+			                AND    A.TRANSID = ORDERLIST_POS.TRANSID ) GIFT_CHECK,                       
+			               ORDERAMT,                                                                     
+			               DECODE(RESULTCODE, 'O1', 'PAY', 'R1', 'REF', 'D1', 'PAY', 'T1', 'REF') TTYPE, 
+			               DECODE(RESULTCODE, 'O1', '0', 'R1', '0', 'D1', '9', 'T1', '9') ATYPE,         
+			               '0' PTYPE                                                                     
+			        FROM   ORDERLIST_POS                                                                 
+			        WHERE  MERCHANTID = #{pg}                                                                
+			        AND    ORDERDATE = #{salesDate}                                                                 
+			        UNION ALL                                                                            
+			        SELECT SALESDATE,                                                                    
+			               BRANCHCODE,                                                                   
+			               APLORDERNO ORDERNO,                                                           
+			               APLNO,                                                                        
+			               APLDATE,                                                                      
+			               APLTIME,                                                                      
+			               (SELECT MAX(TICKET_SNO)                                                       
+			                FROM   ACTIVE_APL_DETAIL                                                     
+			                WHERE  APLID = ACTIVE_APPROVAL.APLID ) GIFT_NO,                              
+			               (SELECT MAX(B.GIFT_CHECK)                                                     
+			                FROM   ACTIVE_APL_DETAIL A,                                                  
+			                       (SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.TICKET_SNO = B.GIFT_NO                                              
+			                AND    A.APLID = ACTIVE_APPROVAL.APLID ) GIFT_CHECK,                         
+			               (SELECT CREATE_AMT                                                            
+			                FROM   (SELECT GIFT_NO,                                                      
+			                               CREATE_AMT                                                    
+			                        FROM   GIFTDELETE ) A                                                
+			                WHERE  GIFT_NO = (SELECT MAX(TICKET_SNO)                                     
+			                        FROM   ACTIVE_APL_DETAIL A                                           
+			                        WHERE  APLID = ACTIVE_APPROVAL.APLID )                               
+			                UNION ALL                                                                    
+			                SELECT CREATE_AMT                                                            
+			                FROM   (SELECT GIFT_NO,                                                      
+			                               CREATE_AMT                                                    
+			                        FROM   GIFTCREATE ) A                                                
+			                WHERE  GIFT_NO = (SELECT MAX(TICKET_SNO)                                     
+			                        FROM   ACTIVE_APL_DETAIL A                                           
+			                        WHERE  APLID = ACTIVE_APPROVAL.APLID ) )ORDERAMT,                    
+			               'ACT' TTYPE,                                                                  
+			               DECODE(APLSTATUS, '1', '0', '2', '9') ATYPE,                                  
+			               NVL(PAY_METHDO, '0') PTYPE                                                    
+			        FROM   ACTIVE_APPROVAL                                                               
+			        WHERE  APLONLINEID = #{otis}                                                               
+			        AND    APLDATE = #{salesDate}                                                                   
+			        UNION ALL                                                                            
+			        SELECT SALESDATE,                                                                    
+			               BRANCHCODE,                                                                   
+			               APLORDERNO ORDERNO,                                                           
+			               APLNO,                                                                        
+			               TO_CHAR(APLDATE, 'YYYYMMDD') APLDATE,                                         
+			               TO_CHAR(APLDATE, 'HH24MISS') APLTIME,                                         
+			               GIFT_NO,                                                                      
+			               (SELECT GIFT_CHECK                                                            
+			                FROM   (SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTDELETE)                                                   
+			                WHERE  GIFT_NO = RC_APPROVAL.GIFT_NO ) GIFT_CHECK,                           
+			               RC_AMT ORDERAMT,                                                              
+			               DECODE(APLSTATUS, 'O1', 'CHR', 'D1', 'CHR', 'TS1', 'TRN') TTYPE,              
+			               DECODE(APLSTATUS, 'O1', '0', 'D1', '9', 'TS1', '0') ATYPE,                    
+			               NVL(PAY_METHDO, '0') PTYPE                                                    
+			        FROM   RC_APPROVAL                                                                   
+			        WHERE  APLONLINEID = #{otis}                                                               
+			        AND    APLDATE BETWEEN TO_DATE( #{salesDate} || '000000' , 'YYYYMMDDHH24MISS') and TO_DATE( #{salesDate} || '235959' , 'YYYYMMDDHH24MISS')
+			        AND    APLSTATUS IN ('O1','D1','TS1') ) A                                            
+			ORDER BY TTYPE, ATYPE, APLNO      
+		]]>
+	</select>
+	<select id="getGssmSettlementSelect" resultType="GssmSelect" parameterType="ParamGsRetail">
+		<![CDATA[
+			SELECT SALESDATE,                                                                            
+			       BRANCHCODE,                                                                           
+			       ORDERNO,                                                                              
+			       APLNO,                                                                                
+			       APLDATE,                                                                              
+			       APLTIME,                                                                              
+			       GIFT_NO,                                                                              
+			       GIFT_CHECK,                                                                           
+			       (SELECT EXTEND_NO                                                                     
+			        FROM   GIFTEXTEND                                                                    
+			        WHERE  GIFT_NO = A.GIFT_NO) AS EXTEND_NO,                                            
+			       ORDERAMT,                                                                             
+			       TTYPE,                                                                                
+			       ATYPE,                                                                                
+			       PTYPE                                                                                 
+			FROM   (SELECT /*+ INDEX(ORDERLIST_POS IDX_ORDERLIST_POS_S_DATE_003) */SALESDATE,            
+			               BRANCHCODE,                                                                   
+			               ORDERNO,                                                                      
+			               APLNO,                                                                        
+			               APLDATE,                                                                      
+			               APLTIME,                                                                      
+			               (SELECT MAX(B.GIFT_NO)                                                        
+			                FROM   ORDERDETAIL A,                                                        
+			                       (SELECT GIFT_NO,                                                      
+			                               SEQ_NO                                                        
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_NO,                                                      
+			                               SEQ_NO                                                        
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.C_SERIAL = B.SEQ_NO                                                 
+			                AND    A.TRANSID = ORDERLIST_POS.TRANSID ) GIFT_NO,                          
+			               (SELECT MAX(B.GIFT_CHECK)                                                     
+			                FROM   ORDERDETAIL A,                                                        
+			                       (SELECT GIFT_CHECK,                                                   
+			                               SEQ_NO                                                        
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               SEQ_NO                                                        
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.C_SERIAL = B.SEQ_NO                                                 
+			                AND    A.TRANSID = ORDERLIST_POS.TRANSID ) GIFT_CHECK,                       
+			               ORDERAMT,                                                                     
+			               DECODE(RESULTCODE, 'O1', 'PAY', 'R1', 'REF', 'D1', 'PAY', 'T1', 'REF') TTYPE, 
+			               DECODE(RESULTCODE, 'O1', '0', 'R1', '0', 'D1', '9', 'T1', '9') ATYPE,         
+			               '0' PTYPE                                                                     	
+			        FROM   ORDERLIST_POS                                                                 
+			        WHERE  MERCHANTID = #{pg}                                                                
+			        AND    SALESDATE =  #{salesDate}                                                                 
+			        UNION ALL                                                                            
+			        SELECT SALESDATE,                                                                    
+			               BRANCHCODE,                                                                   
+			               APLORDERNO ORDERNO,                                                           
+			               APLNO,                                                                        
+			               APLDATE,                                                                      
+			               APLTIME,                                                                      
+			               (SELECT MAX(TICKET_SNO)                                                       
+			                FROM   ACTIVE_APL_DETAIL                                                     
+			                WHERE  APLID = ACTIVE_APPROVAL.APLID ) GIFT_NO,                              
+			               (SELECT MAX(B.GIFT_CHECK)                                                     
+			                FROM   ACTIVE_APL_DETAIL A,                                                  
+			                       (SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTDELETE) B                                                 
+			                WHERE  A.TICKET_SNO = B.GIFT_NO                                              
+			                AND    A.APLID = ACTIVE_APPROVAL.APLID ) GIFT_CHECK,                         
+			               (SELECT CREATE_AMT                                                            
+			                FROM   (SELECT GIFT_NO,                                                      
+			                               CREATE_AMT                                                    
+			                        FROM   GIFTDELETE ) A                                                
+			                WHERE  GIFT_NO = (SELECT MAX(TICKET_SNO)                                     
+			                        FROM   ACTIVE_APL_DETAIL A                                           
+			                        WHERE  APLID = ACTIVE_APPROVAL.APLID )                               
+			                UNION ALL                                                                    
+			                SELECT CREATE_AMT                                                            
+			                FROM   (SELECT GIFT_NO,                                                      
+			                               CREATE_AMT                                                    
+			                        FROM   GIFTCREATE ) A                                                
+			                WHERE  GIFT_NO = (SELECT MAX(TICKET_SNO)                                     
+			                        FROM   ACTIVE_APL_DETAIL A                                           
+			                        WHERE  APLID = ACTIVE_APPROVAL.APLID ) )ORDERAMT,                    
+			               'ACT' TTYPE,                                                                  
+			               DECODE(APLSTATUS, '1', '0', '2', '9') ATYPE,                                  
+			               NVL(PAY_METHDO, '0') PTYPE                                                    
+			        FROM   ACTIVE_APPROVAL                                                               
+			        WHERE  APLONLINEID = #{otis}                                                               
+			        AND    SALESDATE =  #{salesDate}                                                                 
+			        UNION ALL                                                                            
+			        SELECT SALESDATE,                                                                    
+			               BRANCHCODE,                                                                   
+			               APLORDERNO ORDERNO,                                                           
+			               APLNO,                                                                        
+			               TO_CHAR(APLDATE, 'YYYYMMDD') APLDATE,                                         
+			               TO_CHAR(APLDATE, 'HH24MISS') APLTIME,                                         
+			               GIFT_NO,                                                                      
+			               (SELECT GIFT_CHECK                                                            
+			                FROM   (SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTCREATE                                                    
+			                        UNION ALL                                                            
+			                        SELECT GIFT_CHECK,                                                   
+			                               GIFT_NO                                                       
+			                        FROM   GIFTDELETE)                                                   
+			                WHERE  GIFT_NO = RC_APPROVAL.GIFT_NO ) GIFT_CHECK,                           
+			               RC_AMT ORDERAMT,                                                              
+			               DECODE(APLSTATUS, 'O1', 'CHR', 'D1', 'CHR', 'TS1', 'TRN') TTYPE,              
+			               DECODE(APLSTATUS, 'O1', '0', 'D1', '9', 'TS1', '0') ATYPE,                    
+			               NVL(PAY_METHDO, '0') PTYPE                                                    
+			        FROM   RC_APPROVAL                                                                   
+			        WHERE  APLONLINEID = #{otis}                                                               
+			        AND    SALESDATE =  #{salesDate}                                                                 
+			        AND    APLSTATUS IN ('O1','D1','TS1') ) A                                            
+			ORDER BY TTYPE, ATYPE, APLNO 
+		]]>
+	</select>
+	
+	<select id="getOrderList" parameterType="ParamGetOrderList"	resultType="OrderList">
+		<![CDATA[
+		SELECT	TRANSID AS transId,
+				M_ID AS merchantId,
+				M_ONO AS orderNo,
+				M_ODATE AS mOrderDate,
+				O_T_MONEY AS orderMoney,
+				O_DATE AS orderDate,
+				O_TIME AS orderTime,
+				O_RESULT AS orderResult,
+				O_RESULTDATE AS orderResultDate,
+				O_ADMITNO AS orderAdmitNo,
+				O_ADMITDATE AS orderAdmitDate,
+				REFUND_DATE AS refundDate,
+				O_CHARGE AS orderChatge,
+				M_DCRATE AS dcRate,
+				APPROVE_DT AS approvalDate,
+				CANCEL_APPROVE_DT AS cancelApprovalDate,
+				O_CANCELDATE AS orderCancelDate,
+				VAT_F AS vat,
+				T_MID AS tid,
+				M_MID AS mid,
+				WAP_F AS wap,
+				INSERT_DT AS insertDate 
+		FROM KPC_APPROVAL.ORDERLIST
+		WHERE M_ID = #{merchantId} AND O_DATE = #{searchDate}
+		]]>
+	</select>
+</mapper>
+
+
+

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<configuration>
+
+	<include resource="org/springframework/boot/logging/logback/base.xml" />
+	<!-- 날짜별 로그 : INFO Level -->
+	<appender name="dailyRollingFile"
+		class="ch.qos.logback.core.rolling.RollingFileAppender">
+		<file>/home/backadm/logs/billingService/all.log</file>
+
+		<rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+			<!-- 파일이 하루에 한개씩 생성된다 -->
+			<fileNamePattern>/home/backadm/logs/billingService/all.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
+		</rollingPolicy>
+
+		<encoder>
+			<pattern>%-5level, %d{yyyy-MM-dd HH:mm:ss.SSS}, %-30class{0}|%-5line,
+				%msg%n</pattern>
+		</encoder>
+
+	</appender>	
+	<root level="INFO">
+		<appender-ref ref="dailyRollingFile" />
+	</root>	
+	<logger name="jdbc" level="OFF" />
+	<logger name="jdbc.sqltiming" level="INFO" />
+	<logger name="kr.co.kpcard" level="INFO" />
+</configuration>
